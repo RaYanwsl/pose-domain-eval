@@ -30,6 +30,18 @@ def frame_metrics(pred: np.ndarray, gt: np.ndarray) -> dict[str, float]:
 def sequence_metrics(pred: np.ndarray, gt: np.ndarray) -> dict[str, float]:
     if pred.shape != gt.shape or pred.ndim != 3:
         raise ValueError("序列必须是对齐后的 (T, J, 3)")
-    frames = [frame_metrics(pred[index], gt[index]) for index in range(pred.shape[0])]
-    keys = frames[0].keys()
-    return {key: float(np.mean([frame[key] for frame in frames])) for key in keys}
+    rooted_pred = pred - pred[:, :1, :]
+    rooted_gt = gt - gt[:, :1, :]
+    mpjpe = float(np.linalg.norm(rooted_pred - rooted_gt, axis=2).mean() * 1000.0)
+    aligned = np.empty_like(pred, dtype=np.float64)
+    for index in range(pred.shape[0]):
+        aligned[index] = similarity_align(pred[index], gt[index])
+    per_joint = np.linalg.norm(aligned - gt, axis=2) * 1000.0
+    return {
+        "mpjpe": mpjpe,
+        "pa_mpjpe": float(per_joint.mean()),
+        "arm_pa": float(per_joint[:, list(ARM_JOINTS)].mean()),
+        "leg_pa": float(per_joint[:, list(LEG_JOINTS)].mean()),
+        "head_pa": float(per_joint[:, list(HEAD_JOINTS)].mean()),
+        "torso_pa": float(per_joint[:, list(TORSO_JOINTS)].mean()),
+    }
